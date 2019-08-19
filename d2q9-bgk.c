@@ -219,6 +219,12 @@ int main(int argc, char* argv[])
 #endif
   }
 
+  // Read cells from device
+  err = clEnqueueReadBuffer(
+    ocl.queue, ocl.cells, CL_TRUE, 0,
+    sizeof(t_speed) * params.nx * params.ny, cells, 0, NULL, NULL);
+  checkError(err, "reading cells data", __LINE__);
+
   gettimeofday(&timstr, NULL);
   toc = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
   getrusage(RUSAGE_SELF, &ru);
@@ -241,24 +247,15 @@ int main(int argc, char* argv[])
 
 int timestep(const t_param params, t_speed* cells, t_speed* tmp_cells, int* obstacles, t_ocl ocl)
 {
-  cl_int err;
 
-  // Write cells to device
-  err = clEnqueueWriteBuffer(
-    ocl.queue, ocl.cells, CL_TRUE, 0,
-    sizeof(t_speed) * params.nx * params.ny, cells, 0, NULL, NULL);
-  checkError(err, "writing cells data", __LINE__);
+  
 
   accelerate_flow(params, cells, obstacles, ocl);
   propagate(params, cells, tmp_cells, ocl);
   rebound(params, cells, tmp_cells, obstacles, ocl);
   collision(params, cells, tmp_cells, obstacles, ocl);
 
-  // Read cells from device
-  err = clEnqueueReadBuffer(
-    ocl.queue, ocl.cells, CL_TRUE, 0,
-    sizeof(t_speed) * params.nx * params.ny, cells, 0, NULL, NULL);
-  checkError(err, "reading cells data", __LINE__);
+  
   return EXIT_SUCCESS;
 }
 
@@ -672,17 +669,18 @@ int initialise(const char* paramfile, const char* obstaclefile,
                                   sizeof(size_t), &ocl->work_group_size, NULL);
   checkError(err, "Getting kernel work group info", __LINE__);
 
-  size_t maxSize = ocl->work_group_size;
+  size_t size = ocl->work_group_size;
   
-  if (maxSize >= params->nx){
+  if (size >= params->nx){
     ocl->local[0] = params->nx;
-    ocl->local[1] = maxSize/params->nx;
+    ocl->local[1] = size/params->nx;
   } else {
-    ocl->local[0] = maxSize;
+    ocl->local[0] = size;
     ocl->local[1] = 1;
   }
   ocl->num_groups = (params->nx/ocl->local[0])*(params->ny/ocl->local[1]);
 
+  printf("using groups of %zu iterations\n", size);
   ocl->partial_tot_u = clCreateBuffer(
     ocl->context, CL_MEM_READ_WRITE,
     sizeof(cl_int) * ocl->num_groups, NULL, &err);
