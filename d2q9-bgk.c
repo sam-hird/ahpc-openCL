@@ -605,7 +605,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "creating av_velocity kernel", __LINE__);
   ocl->timestep = clCreateKernel(ocl->program, "timestep", &err);
   checkError(err, "creating timestep kernel", __LINE__);
-
+ 
 
   // Allocate OpenCL buffers
   ocl->cells = clCreateBuffer(
@@ -625,7 +625,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
   err = clGetKernelWorkGroupInfo (ocl->av_velocity, ocl->device, CL_KERNEL_WORK_GROUP_SIZE, 
                                   sizeof(size_t), &ocl->work_group_size, NULL);
   checkError(err, "Getting kernel work group info", __LINE__);
-  ocl->work_group_size = 128;
+  ocl->work_group_size = 64;
   size_t maxSize = ocl->work_group_size;
   
   if (maxSize >= params->nx){
