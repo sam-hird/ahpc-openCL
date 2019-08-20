@@ -93,6 +93,7 @@ typedef struct
   cl_kernel  rebound;
   cl_kernel  collision;
   cl_kernel  av_velocity;
+  cl_kernel  timestep;
 
   cl_mem cells;
   cl_mem tmp_cells;
@@ -125,7 +126,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
 ** timestep calls, in order, the functions:
 ** accelerate_flow(), propagate(), rebound() & collision()
 */
-int timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl);
+float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, float* hptotcells, float* hptotu);
 int accelerate_flow(const t_param params, float* cells, int* obstacles, t_ocl ocl);
 int propagate(const t_param params, float* cells, float* tmp_cells, t_ocl ocl);
 int rebound(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl);
@@ -210,14 +211,24 @@ int main(int argc, char* argv[])
 
   for (int tt = 0; tt < params.maxIters; tt++)
   {
-    timestep(params, cells, tmp_cells, obstacles, ocl);
-    av_vels[tt] = av_velocity(params, cells, obstacles, ocl, hptotcells, hptotu);
+    av_vels[tt] = timestep(params, cells, tmp_cells, obstacles, ocl, hptotcells, hptotu);
+    //pointer swap
+    cl_mem temp = ocl.cells;
+    ocl.cells = ocl.tmp_cells;
+    ocl.tmp_cells = temp;
+
 #ifdef DEBUG
     printf("==timestep: %d==\n", tt);
     printf("av velocity: %.12E\n", av_vels[tt]);
     printf("tot density: %.12E\n", total_density(params, cells));
 #endif
   }
+
+  // Read cells from device
+  err = clEnqueueReadBuffer(
+    ocl.queue, ocl.cells, CL_TRUE, 0,
+    sizeof(float) * params.nx * params.ny * NSPEEDS, cells, 0, NULL, NULL);
+  checkError(err, "reading cells data", __LINE__);
 
   gettimeofday(&timstr, NULL);
   toc = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
@@ -239,32 +250,11 @@ int main(int argc, char* argv[])
   return EXIT_SUCCESS;
 }
 
-int timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl)
+float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, float* hptotcells, float* hptotu)
 {
   cl_int err;
 
-  // Write cells to device
-  err = clEnqueueWriteBuffer(
-    ocl.queue, ocl.cells, CL_TRUE, 0,
-    sizeof(float) * params.nx * params.ny * NSPEEDS, cells, 0, NULL, NULL);
-  checkError(err, "writing cells data", __LINE__);
-
-  accelerate_flow(params, cells, obstacles, ocl);
-  propagate(params, cells, tmp_cells, ocl);
-  rebound(params, cells, tmp_cells, obstacles, ocl);
-  collision(params, cells, tmp_cells, obstacles, ocl);
-
-  // Read cells from device
-  err = clEnqueueReadBuffer(
-    ocl.queue, ocl.cells, CL_TRUE, 0,
-    sizeof(float) * params.nx * params.ny * NSPEEDS, cells, 0, NULL, NULL);
-  checkError(err, "reading cells data", __LINE__);
-  return EXIT_SUCCESS;
-}
-
-int accelerate_flow(const t_param params, float* cells, int* obstacles, t_ocl ocl)
-{
-  cl_int err;
+  //accelerate flow
 
   // Set kernel arguments
   err = clSetKernelArg(ocl.accelerate_flow, 0, sizeof(cl_mem), &ocl.cells);
@@ -289,6 +279,64 @@ int accelerate_flow(const t_param params, float* cells, int* obstacles, t_ocl oc
   // Wait for kernel to finish
   err = clFinish(ocl.queue);
   checkError(err, "waiting for accelerate_flow kernel", __LINE__);
+
+  //rest of timsetep
+
+  // Set kernel arguments
+  err = clSetKernelArg(ocl.timestep, 0, sizeof(cl_mem), &ocl.cells);
+  checkError(err, "setting timestep arg 0", __LINE__);
+  err = clSetKernelArg(ocl.timestep, 1, sizeof(cl_mem), &ocl.tmp_cells);
+  checkError(err, "setting timestep arg 1", __LINE__);
+  err = clSetKernelArg(ocl.timestep, 2, sizeof(cl_mem), &ocl.obstacles);
+  checkError(err, "setting timestep arg 2", __LINE__);
+  err = clSetKernelArg(ocl.timestep, 3, sizeof(cl_int), &params.nx);
+  checkError(err, "setting timestep arg 3", __LINE__);
+  err = clSetKernelArg(ocl.timestep, 4, sizeof(cl_int), &params.ny);
+  checkError(err, "setting timestep arg 4", __LINE__);
+  err = clSetKernelArg(ocl.timestep, 5, sizeof(cl_float)* ocl.work_group_size, NULL);
+  checkError(err, "setting timestep arg 5", __LINE__); 
+  err = clSetKernelArg(ocl.timestep, 6, sizeof(cl_float)* ocl.work_group_size, NULL);
+  checkError(err, "setting timestep arg 6", __LINE__);
+  err = clSetKernelArg(ocl.timestep, 7, sizeof(cl_mem), &ocl.partial_tot_u);
+  checkError(err, "setting timestep arg 7", __LINE__);
+  err = clSetKernelArg(ocl.timestep, 8, sizeof(cl_mem), &ocl.partial_tot_cells);
+  checkError(err, "setting timestep arg 8", __LINE__);
+  err = clSetKernelArg(ocl.timestep, 9, sizeof(cl_float), &params.omega);
+  checkError(err, "setting timestep arg 9", __LINE__);
+
+  // Enqueue kernel
+  size_t global2[2] = {params.nx,params.ny};
+  err = clEnqueueNDRangeKernel(ocl.queue, ocl.timestep,
+                               2, NULL, global2, ocl.local, 0, NULL, NULL);
+  checkError(err, "enqueueing timestep kernel", __LINE__);
+
+  // Wait for kernel to finish
+  err = clFinish(ocl.queue);
+  checkError(err, "waiting for timestep kernel", __LINE__); 
+
+  // read tot_u and tot_cells buffer then sum up and return
+  err = clEnqueueReadBuffer(
+    ocl.queue, ocl.partial_tot_cells, CL_TRUE, 0,
+    sizeof(float) * ocl.num_groups, hptotcells, 0, NULL, NULL);
+  checkError(err, "reading cells data", __LINE__);
+  err = clEnqueueReadBuffer(
+    ocl.queue, ocl.partial_tot_u, CL_TRUE, 0,
+    sizeof(float) * ocl.num_groups, hptotu, 0, NULL, NULL);
+  checkError(err, "reading cells data", __LINE__);
+  float sum_u = 0.f;
+  float sum_cells = 0.f;
+  for (int i = 0; i < ocl.num_groups; ++i)
+  {
+    sum_u += hptotu[i];
+    sum_cells += hptotcells[i];
+  }
+
+  return sum_u/sum_cells;
+}
+
+int accelerate_flow(const t_param params, float* cells, int* obstacles, t_ocl ocl)
+{
+  
 
   return EXIT_SUCCESS;
 }
@@ -651,6 +699,8 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "creating rebound kernel", __LINE__);
   ocl->av_velocity = clCreateKernel(ocl->program, "av_velocity", &err);
   checkError(err, "creating av_velocity kernel", __LINE__);
+  ocl->timestep = clCreateKernel(ocl->program, "timestep", &err);
+  checkError(err, "creating timestep kernel", __LINE__);
 
 
   // Allocate OpenCL buffers
