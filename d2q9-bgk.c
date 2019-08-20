@@ -75,9 +75,9 @@ typedef struct
   int    ny;            /* no. of cells in y-direction */
   int    maxIters;      /* no. of iterations */
   int    reynolds_dim;  /* dimension for Reynolds number */
-  float density;       /* density per link */
-  float accel;         /* density redistribution */
-  float omega;         /* relaxation parameter */
+  cl_float density;       /* density per link */
+  cl_float accel;         /* density redistribution */
+  cl_float omega;         /* relaxation parameter */
 } t_param;
 
 /* struct to hold OpenCL objects */
@@ -109,7 +109,7 @@ typedef struct
 /* struct to hold the 'speed' values */
 typedef struct
 {
-  float speeds[NSPEEDS];
+  cl_float speeds[NSPEEDS];
 } t_speed;
 
 /*
@@ -118,34 +118,34 @@ typedef struct
 
 /* load params, allocate memory, load obstacles & initialise fluid particle densities */
 int initialise(const char* paramfile, const char* obstaclefile,
-               t_param* params, float** cells_ptr, float** tmp_cells_ptr,
-               int** obstacles_ptr, float** av_vels_ptr, t_ocl* ocl, float** hptotu, int** hptotcells);
+               t_param* params, cl_float** cells_ptr, cl_float** tmp_cells_ptr,
+               int** obstacles_ptr, cl_float** av_vels_ptr, t_ocl* ocl, cl_float** hptotu, cl_int** hptotcells);
 
 /*
 ** The main calculation methods.
 ** timestep calls, in order, the functions:
 ** accelerate_flow(), propagate(), rebound() & collision()
 */
-float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu);
-int accelerate_flow(const t_param params, float* cells, int* obstacles, t_ocl ocl);
-int propagate(const t_param params, float* cells, float* tmp_cells, t_ocl ocl);
-int rebound(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl);
-int collision(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl);
-int write_values(const t_param params, float* cells, int* obstacles, float* av_vels);
+cl_float timestep(const t_param params, cl_float* cells, cl_float* tmp_cells, int* obstacles, t_ocl ocl, cl_int* hptotcells , cl_float* hptotu);
+int accelerate_flow(const t_param params, cl_float* cells, int* obstacles, t_ocl ocl);
+int propagate(const t_param params, cl_float* cells, cl_float* tmp_cells, t_ocl ocl);
+int rebound(const t_param params, cl_float* cells, cl_float* tmp_cells, int* obstacles, t_ocl ocl);
+int collision(const t_param params, cl_float* cells, cl_float* tmp_cells, int* obstacles, t_ocl ocl);
+int write_values(const t_param params, cl_float* cells, int* obstacles, cl_float* av_vels);
 
 /* finalise, including freeing up allocated memory */
-int finalise(const t_param* params, float** cells_ptr, float** tmp_cells_ptr,
-             int** obstacles_ptr, float** av_vels_ptr, t_ocl ocl);
+int finalise(const t_param* params, cl_float** cells_ptr, cl_float** tmp_cells_ptr,
+             int** obstacles_ptr, cl_float** av_vels_ptr, t_ocl ocl);
 
 /* Sum all the densities in the grid.
 ** The total should remain constant from one timestep to the next. */
-float total_density(const t_param params, float* cells);
+cl_float total_density(const t_param params, cl_float* cells);
 
 /* compute average velocity */
-float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu);
+cl_float av_velocity(const t_param params, cl_float* cells, int* obstacles, t_ocl ocl, cl_int* hptotcells , cl_float* hptotu);
 
 /* calculate Reynolds number */
-float calc_reynolds(const t_param params, float* cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu);
+cl_float calc_reynolds(const t_param params, cl_float* cells, int* obstacles, t_ocl ocl, cl_int* hptotcells , cl_float* hptotu);
 
 /* utility functions */
 void checkError(cl_int err, const char *op, const int line);
@@ -164,20 +164,20 @@ int main(int argc, char* argv[])
   char*    obstaclefile = NULL; /* name of a the input obstacle file */
   t_param  params;              /* struct to hold parameter values */
   t_ocl    ocl;                 /* struct to hold OpenCL objects */
-  float* cells     = NULL;    /* grid containing fluid densities */
-  float* tmp_cells = NULL;    /* scratch space */
+  cl_float* cells     = NULL;    /* grid containing fluid densities */
+  cl_float* tmp_cells = NULL;    /* scratch space */
   int*     obstacles = NULL;    /* grid indicating which cells are blocked */
-  float* av_vels   = NULL;     /* a record of the av. velocity computed for each timestep */
+  cl_float* av_vels   = NULL;     /* a record of the av. velocity computed for each timestep */
 
-  float* hptotu;
+  cl_float* hptotu;
   int*   hptotcells;
 
   cl_int err;
   struct timeval timstr;        /* structure to hold elapsed time */
   struct rusage ru;             /* structure to hold CPU time--system and user */
-  double tic, toc;              /* floating point numbers to calculate elapsed wallclock time */
-  double usrtim;                /* floating point number to record elapsed user CPU time */
-  double systim;                /* floating point number to record elapsed system CPU time */
+  double tic, toc;              /* cl_floating point numbers to calculate elapsed wallclock time */
+  double usrtim;                /* cl_floating point number to record elapsed user CPU time */
+  double systim;                /* cl_floating point number to record elapsed system CPU time */
 
   /* parse the command line */
   if (argc != 3)
@@ -200,7 +200,7 @@ int main(int argc, char* argv[])
   // Write cells to OpenCL buffer
   err = clEnqueueWriteBuffer(
     ocl.queue, ocl.cells, CL_TRUE, 0,
-    sizeof(float) * params.nx * params.ny * NSPEEDS, cells, 0, NULL, NULL);
+    sizeof(cl_float) * params.nx * params.ny * NSPEEDS, cells, 0, NULL, NULL);
   checkError(err, "writing cells data", __LINE__);
 
   // Write obstacles to OpenCL buffer
@@ -227,7 +227,7 @@ int main(int argc, char* argv[])
   // Read cells from device
   err = clEnqueueReadBuffer(
     ocl.queue, ocl.cells, CL_TRUE, 0,
-    sizeof(float) * params.nx * params.ny * NSPEEDS, cells, 0, NULL, NULL);
+    sizeof(cl_float) * params.nx * params.ny * NSPEEDS, cells, 0, NULL, NULL);
   checkError(err, "reading cells data", __LINE__);
 
   gettimeofday(&timstr, NULL);
@@ -250,7 +250,7 @@ int main(int argc, char* argv[])
   return EXIT_SUCCESS;
 }
 
-float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu)
+cl_float timestep(const t_param params, cl_float* cells, cl_float* tmp_cells, int* obstacles, t_ocl ocl, cl_int* hptotcells , cl_float* hptotu)
 {
   cl_int err;
 
@@ -321,10 +321,10 @@ float timestep(const t_param params, float* cells, float* tmp_cells, int* obstac
   checkError(err, "reading cells data", __LINE__);
   err = clEnqueueReadBuffer(
     ocl.queue, ocl.partial_tot_u, CL_TRUE, 0,
-    sizeof(float) * ocl.num_groups, hptotu, 0, NULL, NULL);
+    sizeof(cl_float) * ocl.num_groups, hptotu, 0, NULL, NULL);
   checkError(err, "reading cells data", __LINE__);
-  float sum_u = 0.f;
-  float sum_cells = 0.f;
+  cl_float sum_u = 0.f;
+  cl_float sum_cells = 0.f;
   for (int i = 0; i < ocl.num_groups; ++i)
   {
     sum_u += hptotu[i];
@@ -334,7 +334,7 @@ float timestep(const t_param params, float* cells, float* tmp_cells, int* obstac
   return sum_u/sum_cells;
 }
 
-float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu)
+cl_float av_velocity(const t_param params, cl_float* cells, int* obstacles, t_ocl ocl, cl_int* hptotcells , cl_float* hptotu)
 { 
   cl_int err; 
 
@@ -373,9 +373,9 @@ float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl,
   checkError(err, "reading cells data", __LINE__);
   err = clEnqueueReadBuffer(
     ocl.queue, ocl.partial_tot_u, CL_TRUE, 0,
-    sizeof(float) * ocl.num_groups, hptotu, 0, NULL, NULL);
+    sizeof(cl_float) * ocl.num_groups, hptotu, 0, NULL, NULL);
   checkError(err, "reading cells data", __LINE__);
-  float sum_u = 0.f;
+  cl_float sum_u = 0.f;
   int sum_cells = 0.f;
   for (int i = 0; i < ocl.num_groups; ++i)
   {
@@ -387,8 +387,8 @@ float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl,
 }
 
 int initialise(const char* paramfile, const char* obstaclefile,
-               t_param* params, float** cells_ptr, float** tmp_cells_ptr,
-               int** obstacles_ptr, float** av_vels_ptr, t_ocl *ocl, float** hptotu, int** hptotcells)
+               t_param* params, cl_float** cells_ptr, cl_float** tmp_cells_ptr,
+               int** obstacles_ptr, cl_float** av_vels_ptr, t_ocl *ocl, cl_float** hptotu, cl_int** hptotcells)
 {
   char   message[1024];  /* message buffer */
   FILE*   fp;            /* file pointer */
@@ -459,12 +459,12 @@ int initialise(const char* paramfile, const char* obstaclefile,
   */
 
   /* main grid */
-  *cells_ptr = (float*)malloc(sizeof(float) * (params->ny * params->nx)*NSPEEDS);
+  *cells_ptr = (cl_float*)malloc(sizeof(cl_float) * (params->ny * params->nx)*NSPEEDS);
 
   if (*cells_ptr == NULL) die("cannot allocate memory for cells", __LINE__, __FILE__);
 
   /* 'helper' grid, used as scratch space */
-  *tmp_cells_ptr = (float*)malloc(sizeof(float) * (params->ny * params->nx) * NSPEEDS);
+  *tmp_cells_ptr = (cl_float*)malloc(sizeof(cl_float) * (params->ny * params->nx) * NSPEEDS);
 
   if (*tmp_cells_ptr == NULL) die("cannot allocate memory for tmp_cells", __LINE__, __FILE__);
 
@@ -474,9 +474,9 @@ int initialise(const char* paramfile, const char* obstaclefile,
   if (*obstacles_ptr == NULL) die("cannot allocate column memory for obstacles", __LINE__, __FILE__);
 
   /* initialise densities */
-  float w0 = params->density * 4.f / 9.f;
-  float w1 = params->density      / 9.f;
-  float w2 = params->density      / 36.f;
+  cl_float w0 = params->density * 4.f / 9.f;
+  cl_float w1 = params->density      / 9.f;
+  cl_float w2 = params->density      / 36.f;
 
   for (int jj = 0; jj < params->ny; jj++)
   {
@@ -538,7 +538,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
   ** allocate space to hold a record of the avarage velocities computed
   ** at each timestep
   */
-  *av_vels_ptr = (float*)malloc(sizeof(float) * params->maxIters);
+  *av_vels_ptr = (cl_float*)malloc(sizeof(cl_float) * params->maxIters);
 
 
   cl_int err;
@@ -610,11 +610,11 @@ int initialise(const char* paramfile, const char* obstaclefile,
   // Allocate OpenCL buffers
   ocl->cells = clCreateBuffer(
     ocl->context, CL_MEM_READ_WRITE,
-    sizeof(float) * params->nx * params->ny * NSPEEDS, NULL, &err);
+    sizeof(cl_float) * params->nx * params->ny * NSPEEDS, NULL, &err);
   checkError(err, "creating cells buffer", __LINE__);
   ocl->tmp_cells = clCreateBuffer(
     ocl->context, CL_MEM_READ_WRITE,
-    sizeof(float) * params->nx * params->ny * NSPEEDS, NULL, &err);
+    sizeof(cl_float) * params->nx * params->ny * NSPEEDS, NULL, &err);
   checkError(err, "creating tmp_cells buffer", __LINE__);
   ocl->obstacles = clCreateBuffer(
     ocl->context, CL_MEM_READ_WRITE,
@@ -646,13 +646,13 @@ int initialise(const char* paramfile, const char* obstaclefile,
     sizeof(cl_mem) * ocl->num_groups, NULL, &err);
   checkError(err, "creating partial_tot_cells buffer", __LINE__);
 
-  *hptotu =     (float*)malloc(sizeof(float) * ocl->num_groups);
+  *hptotu =     (cl_float*)malloc(sizeof(cl_float) * ocl->num_groups);
   *hptotcells = (int*)malloc(sizeof(int) * ocl->num_groups);
   return EXIT_SUCCESS;
 }
 
-int finalise(const t_param* params, float** cells_ptr, float** tmp_cells_ptr,
-             int** obstacles_ptr, float** av_vels_ptr, t_ocl ocl)
+int finalise(const t_param* params, cl_float** cells_ptr, cl_float** tmp_cells_ptr,
+             int** obstacles_ptr, cl_float** av_vels_ptr, t_ocl ocl)
 {
   /*
   ** free up allocated memory
@@ -682,16 +682,16 @@ int finalise(const t_param* params, float** cells_ptr, float** tmp_cells_ptr,
 }
 
 
-float calc_reynolds(const t_param params, float* cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu)
+cl_float calc_reynolds(const t_param params, cl_float* cells, int* obstacles, t_ocl ocl, cl_int* hptotcells , cl_float* hptotu)
 {
-  const float viscosity = 1.f / 6.f * (2.f / params.omega - 1.f);
+  const cl_float viscosity = 1.f / 6.f * (2.f / params.omega - 1.f);
 
   return av_velocity(params, cells, obstacles, ocl,  hptotcells,  hptotu) * params.reynolds_dim / viscosity;
 }
 
-float total_density(const t_param params, float* cells)
+cl_float total_density(const t_param params, cl_float* cells)
 {
-  float total = 0.f;  /* accumulator */
+  cl_float total = 0.f;  /* accumulator */
 
   for (int jj = 0; jj < params.ny; jj++)
   {
@@ -707,15 +707,15 @@ float total_density(const t_param params, float* cells)
   return total;
 }
 
-int write_values(const t_param params, float* cells, int* obstacles, float* av_vels)
+int write_values(const t_param params, cl_float* cells, int* obstacles, cl_float* av_vels)
 {
   FILE* fp;                     /* file pointer */
-  const float c_sq = 1.f / 3.f; /* sq. of speed of sound */
-  float local_density;         /* per grid cell sum of densities */
-  float pressure;              /* fluid pressure in grid cell */
-  float u_x;                   /* x-component of velocity in grid cell */
-  float u_y;                   /* y-component of velocity in grid cell */
-  float u;                     /* norm--root of summed squares--of u_x and u_y */
+  const cl_float c_sq = 1.f / 3.f; /* sq. of speed of sound */
+  cl_float local_density;         /* per grid cell sum of densities */
+  cl_float pressure;              /* fluid pressure in grid cell */
+  cl_float u_x;                   /* x-component of velocity in grid cell */
+  cl_float u_y;                   /* y-component of velocity in grid cell */
+  cl_float u;                     /* norm--root of summed squares--of u_x and u_y */
 
   fp = fopen(FINALSTATEFILE, "w");
 
