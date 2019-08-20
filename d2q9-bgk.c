@@ -377,6 +377,7 @@ cl_float av_velocity(const t_param params, cl_float* cells, int* obstacles, t_oc
   checkError(err, "reading cells data", __LINE__);
   cl_float sum_u = 0.f;
   int sum_cells = 0.f;
+  #pragma vector aligned
   for (int i = 0; i < ocl.num_groups; ++i)
   {
     sum_u += hptotu[i];
@@ -605,7 +606,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "creating av_velocity kernel", __LINE__);
   ocl->timestep = clCreateKernel(ocl->program, "timestep", &err);
   checkError(err, "creating timestep kernel", __LINE__);
- 
+
 
   // Allocate OpenCL buffers
   ocl->cells = clCreateBuffer(
@@ -622,10 +623,10 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "creating obstacles buffer", __LINE__);  
 
   //find workgroup size then allocate partial sum buffers
-  err = clGetKernelWorkGroupInfo (ocl->av_velocity, ocl->device, CL_KERNEL_WORK_GROUP_SIZE, 
+  err = clGetKernelWorkGroupInfo (ocl->av_velocity, ocl->device, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, 
                                   sizeof(size_t), &ocl->work_group_size, NULL);
   checkError(err, "Getting kernel work group info", __LINE__);
-  ocl->work_group_size = 64;
+  //ocl->work_group_size = params->nx/4;
   size_t maxSize = ocl->work_group_size;
   
   if (maxSize >= params->nx){

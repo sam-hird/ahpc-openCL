@@ -207,7 +207,7 @@ void reduce(local float* local_sums, global float* partial_sums)
 
 void reduce2(local int* local_sums, global int* partial_sums)
 {
-  if (get_local_id(0) == 0 && get_local_id(1) == 0) {
+  if (get_local_id(0) == 1 && get_local_id(1) == 0) {
     int sum = 0;
 
     for (int i=0; i<get_local_size(1); ++i) { 
@@ -301,6 +301,7 @@ kernel void timestep( global float* cells,
   const int y_s = (jj == 0) ? (jj + ny - 1) : (jj - 1);
   const int x_w = (ii == 0) ? (ii + nx - 1) : (ii - 1);
 
+  int mask = obstacles[currentIndex];
   /* if the cell contains an obstacle */
   
   //-------propagate + collision + av_vels-------
@@ -358,21 +359,21 @@ kernel void timestep( global float* cells,
   const float d_equ7 = w2 * local_density * (1.f + (-u_x - u_y) * c_sq_inv + ((-u_x - u_y) * (-u_x - u_y)) * c_sq_sq_inv - u_over_c_sq);
   const float d_equ8 = w2 * local_density * (1.f + ( u_x - u_y) * c_sq_inv + (( u_x - u_y) * ( u_x - u_y)) * c_sq_sq_inv - u_over_c_sq);
 
-  tmp_cells[0 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed0 + omega * (d_equ0 - currentSpeed0)) + obstacles[currentIndex] * cells[0 * (nx*ny) + ii  + jj *nx];
-  tmp_cells[1 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed1 + omega * (d_equ1 - currentSpeed1)) + obstacles[currentIndex] * cells[3 * (nx*ny) + x_e + jj *nx];
-  tmp_cells[2 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed2 + omega * (d_equ2 - currentSpeed2)) + obstacles[currentIndex] * cells[4 * (nx*ny) + ii  + y_n*nx];
-  tmp_cells[3 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed3 + omega * (d_equ3 - currentSpeed3)) + obstacles[currentIndex] * cells[1 * (nx*ny) + x_w + jj *nx];
-  tmp_cells[4 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed4 + omega * (d_equ4 - currentSpeed4)) + obstacles[currentIndex] * cells[2 * (nx*ny) + ii  + y_s*nx];
-  tmp_cells[5 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed5 + omega * (d_equ5 - currentSpeed5)) + obstacles[currentIndex] * cells[7 * (nx*ny) + x_e + y_n*nx];
-  tmp_cells[6 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed6 + omega * (d_equ6 - currentSpeed6)) + obstacles[currentIndex] * cells[8 * (nx*ny) + x_w + y_n*nx];
-  tmp_cells[7 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed7 + omega * (d_equ7 - currentSpeed7)) + obstacles[currentIndex] * cells[5 * (nx*ny) + x_w + y_s*nx];
-  tmp_cells[8 * (nx*ny) + currentIndex] = !obstacles[currentIndex] * (currentSpeed8 + omega * (d_equ8 - currentSpeed8)) + obstacles[currentIndex] * cells[6 * (nx*ny) + x_e + y_s*nx];
+  tmp_cells[0 * (nx*ny) + currentIndex] = !mask * (currentSpeed0 + omega * (d_equ0 - currentSpeed0)) + mask * cells[0 * (nx*ny) + ii  + jj *nx];
+  tmp_cells[1 * (nx*ny) + currentIndex] = !mask * (currentSpeed1 + omega * (d_equ1 - currentSpeed1)) + mask * cells[3 * (nx*ny) + x_e + jj *nx];
+  tmp_cells[2 * (nx*ny) + currentIndex] = !mask * (currentSpeed2 + omega * (d_equ2 - currentSpeed2)) + mask * cells[4 * (nx*ny) + ii  + y_n*nx];
+  tmp_cells[3 * (nx*ny) + currentIndex] = !mask * (currentSpeed3 + omega * (d_equ3 - currentSpeed3)) + mask * cells[1 * (nx*ny) + x_w + jj *nx];
+  tmp_cells[4 * (nx*ny) + currentIndex] = !mask * (currentSpeed4 + omega * (d_equ4 - currentSpeed4)) + mask * cells[2 * (nx*ny) + ii  + y_s*nx];
+  tmp_cells[5 * (nx*ny) + currentIndex] = !mask * (currentSpeed5 + omega * (d_equ5 - currentSpeed5)) + mask * cells[7 * (nx*ny) + x_e + y_n*nx];
+  tmp_cells[6 * (nx*ny) + currentIndex] = !mask * (currentSpeed6 + omega * (d_equ6 - currentSpeed6)) + mask * cells[8 * (nx*ny) + x_w + y_n*nx];
+  tmp_cells[7 * (nx*ny) + currentIndex] = !mask * (currentSpeed7 + omega * (d_equ7 - currentSpeed7)) + mask * cells[5 * (nx*ny) + x_w + y_s*nx];
+  tmp_cells[8 * (nx*ny) + currentIndex] = !mask * (currentSpeed8 + omega * (d_equ8 - currentSpeed8)) + mask * cells[6 * (nx*ny) + x_e + y_s*nx];
 
   /* accumulate the norm of x- and y- velocity components */
   int index = get_local_id(0)+get_local_id(1)*get_local_size(0);
-  local_tot_u[index] = !obstacles[currentIndex]*sqrt((u_x * u_x) + (u_y * u_y));
+  local_tot_u[index] = !mask*sqrt((u_x * u_x) + (u_y * u_y));
   /* increase counter of inspected cells */
-  local_tot_cells[index] = !obstacles[currentIndex];
+  local_tot_cells[index] = !mask;
   
 
   barrier(CLK_LOCAL_MEM_FENCE);
