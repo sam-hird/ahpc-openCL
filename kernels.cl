@@ -247,7 +247,7 @@ kernel void av_velocity(global float* cells,
                  / local_density;
     /* accumulate the norm of x- and y- velocity components */
     int index = get_local_id(0)+get_local_id(1)*get_local_size(0);
-    local_tot_u[index] = pow((u_x * u_x) + (u_y * u_y),0.5f);
+    local_tot_u[index] = sqrt((u_x * u_x) + (u_y * u_y));
     /* increase counter of inspected cells */
     local_tot_cells[index] = 1.f;
   }
@@ -400,7 +400,7 @@ kernel void timestep( global float* cells,
            / av_density;
     /* accumulate the norm of x- and y- velocity components */
     int index = get_local_id(0)+get_local_id(1)*get_local_size(0);
-    local_tot_u[index] = pow((u_x * u_x) + (u_y * u_y),0.5f);
+    local_tot_u[index] = sqrt((u_x * u_x) + (u_y * u_y));
     /* increase counter of inspected cells */
     local_tot_cells[index] = 1.f;
   }
