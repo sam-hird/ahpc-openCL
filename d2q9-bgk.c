@@ -119,14 +119,14 @@ typedef struct
 /* load params, allocate memory, load obstacles & initialise fluid particle densities */
 int initialise(const char* paramfile, const char* obstaclefile,
                t_param* params, float** cells_ptr, float** tmp_cells_ptr,
-               int** obstacles_ptr, float** av_vels_ptr, t_ocl* ocl, float** hptotu, float** hptotcells);
+               int** obstacles_ptr, float** av_vels_ptr, t_ocl* ocl, float** hptotu, int** hptotcells);
 
 /*
 ** The main calculation methods.
 ** timestep calls, in order, the functions:
 ** accelerate_flow(), propagate(), rebound() & collision()
 */
-float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, float* hptotcells, float* hptotu);
+float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu);
 int accelerate_flow(const t_param params, float* cells, int* obstacles, t_ocl ocl);
 int propagate(const t_param params, float* cells, float* tmp_cells, t_ocl ocl);
 int rebound(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl);
@@ -142,10 +142,10 @@ int finalise(const t_param* params, float** cells_ptr, float** tmp_cells_ptr,
 float total_density(const t_param params, float* cells);
 
 /* compute average velocity */
-float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl, float* hptotcells, float* hptotu);
+float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu);
 
 /* calculate Reynolds number */
-float calc_reynolds(const t_param params, float* cells, int* obstacles, t_ocl ocl, float* hptotcells, float* hptotu);
+float calc_reynolds(const t_param params, float* cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu);
 
 /* utility functions */
 void checkError(cl_int err, const char *op, const int line);
@@ -170,7 +170,7 @@ int main(int argc, char* argv[])
   float* av_vels   = NULL;     /* a record of the av. velocity computed for each timestep */
 
   float* hptotu;
-  float*   hptotcells;
+  int*   hptotcells;
 
   cl_int err;
   struct timeval timstr;        /* structure to hold elapsed time */
@@ -191,7 +191,7 @@ int main(int argc, char* argv[])
   }
 
   /* initialise our data structures and load values from file */
-  initialise(paramfile, obstaclefile, &params, &cells, &tmp_cells, &obstacles, &av_vels, &ocl, &hptotcells, &hptotu);
+  initialise(paramfile, obstaclefile, &params, &cells, &tmp_cells, &obstacles, &av_vels, &ocl, &hptotu, &hptotcells);
 
   /* iterate for maxIters timesteps */
   gettimeofday(&timstr, NULL);
@@ -250,7 +250,7 @@ int main(int argc, char* argv[])
   return EXIT_SUCCESS;
 }
 
-float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, float* hptotcells, float* hptotu)
+float timestep(const t_param params, float* cells, float* tmp_cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu)
 {
   cl_int err;
 
@@ -317,7 +317,7 @@ float timestep(const t_param params, float* cells, float* tmp_cells, int* obstac
   // read tot_u and tot_cells buffer then sum up and return
   err = clEnqueueReadBuffer(
     ocl.queue, ocl.partial_tot_cells, CL_TRUE, 0,
-    sizeof(float) * ocl.num_groups, hptotcells, 0, NULL, NULL);
+    sizeof(int) * ocl.num_groups, hptotcells, 0, NULL, NULL);
   checkError(err, "reading cells data", __LINE__);
   err = clEnqueueReadBuffer(
     ocl.queue, ocl.partial_tot_u, CL_TRUE, 0,
@@ -334,7 +334,7 @@ float timestep(const t_param params, float* cells, float* tmp_cells, int* obstac
   return sum_u/sum_cells;
 }
 
-float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl, float* hptotcells, float* hptotu)
+float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu)
 { 
   cl_int err; 
 
@@ -369,14 +369,14 @@ float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl,
   // read tot_u and tot_cells buffer then sum up and return
   err = clEnqueueReadBuffer(
     ocl.queue, ocl.partial_tot_cells, CL_TRUE, 0,
-    sizeof(float) * ocl.num_groups, hptotcells, 0, NULL, NULL);
+    sizeof(int) * ocl.num_groups, hptotcells, 0, NULL, NULL);
   checkError(err, "reading cells data", __LINE__);
   err = clEnqueueReadBuffer(
     ocl.queue, ocl.partial_tot_u, CL_TRUE, 0,
     sizeof(float) * ocl.num_groups, hptotu, 0, NULL, NULL);
   checkError(err, "reading cells data", __LINE__);
   float sum_u = 0.f;
-  float sum_cells = 0.f;
+  int sum_cells = 0.f;
   for (int i = 0; i < ocl.num_groups; ++i)
   {
     sum_u += hptotu[i];
@@ -388,7 +388,7 @@ float av_velocity(const t_param params, float* cells, int* obstacles, t_ocl ocl,
 
 int initialise(const char* paramfile, const char* obstaclefile,
                t_param* params, float** cells_ptr, float** tmp_cells_ptr,
-               int** obstacles_ptr, float** av_vels_ptr, t_ocl *ocl, float** hptotu, float** hptotcells)
+               int** obstacles_ptr, float** av_vels_ptr, t_ocl *ocl, float** hptotu, int** hptotcells)
 {
   char   message[1024];  /* message buffer */
   FILE*   fp;            /* file pointer */
@@ -647,7 +647,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
   checkError(err, "creating partial_tot_cells buffer", __LINE__);
 
   *hptotu =     (float*)malloc(sizeof(float) * ocl->num_groups);
-  *hptotcells = (float*)malloc(sizeof(float) * ocl->num_groups);
+  *hptotcells = (int*)malloc(sizeof(int) * ocl->num_groups);
   return EXIT_SUCCESS;
 }
 
@@ -682,7 +682,7 @@ int finalise(const t_param* params, float** cells_ptr, float** tmp_cells_ptr,
 }
 
 
-float calc_reynolds(const t_param params, float* cells, int* obstacles, t_ocl ocl, float* hptotcells, float* hptotu)
+float calc_reynolds(const t_param params, float* cells, int* obstacles, t_ocl ocl, int* hptotcells, float* hptotu)
 {
   const float viscosity = 1.f / 6.f * (2.f / params.omega - 1.f);
 

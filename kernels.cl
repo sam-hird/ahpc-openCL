@@ -205,14 +205,29 @@ void reduce(local float* local_sums, global float* partial_sums)
   }
 }
 
+void reduce2(local int* local_sums, global int* partial_sums)
+{
+  if (get_local_id(0) == 0 && get_local_id(1) == 0) {
+    int sum = 0;
+
+    for (int i=0; i<get_local_size(1); ++i) { 
+      for (int j = 0; j < get_local_size(0); ++j)
+        {
+          sum += local_sums[i*get_local_size(0)+j];
+        }
+    }
+    partial_sums[get_group_id(0)+get_group_id(1)*get_num_groups(0)] = sum;
+  }
+}
+
 kernel void av_velocity(global float* cells, 
                         global int* obstacles, 
                         int nx, 
                         int ny,
                         local  float* local_tot_u,
-                        local  float* local_tot_cells,
+                        local  int* local_tot_cells,
                         global float* partial_tot_u,
-                        global float* partial_tot_cells)
+                        global int* partial_tot_cells)
 {
 
   /* get column and row indices */
@@ -254,7 +269,7 @@ kernel void av_velocity(global float* cells,
 
   barrier(CLK_LOCAL_MEM_FENCE);
   reduce(local_tot_u, partial_tot_u); 
-  reduce(local_tot_cells, partial_tot_cells); 
+  reduce2(local_tot_cells, partial_tot_cells); 
 }
 
 kernel void timestep( global float* cells, 
@@ -263,9 +278,9 @@ kernel void timestep( global float* cells,
                       int nx, 
                       int ny,
                       local  float* local_tot_u,
-                      local  float* local_tot_cells,
+                      local  int* local_tot_cells,
                       global float* partial_tot_u,
-                      global float* partial_tot_cells,
+                      global int* partial_tot_cells,
                       float omega)
 {
   const float c_sq = 1.f / 3.f; /* square of speed of sound */
@@ -402,11 +417,11 @@ kernel void timestep( global float* cells,
     int index = get_local_id(0)+get_local_id(1)*get_local_size(0);
     local_tot_u[index] = sqrt((u_x * u_x) + (u_y * u_y));
     /* increase counter of inspected cells */
-    local_tot_cells[index] = 1.f;
+    local_tot_cells[index] = 1;
   }
 
   barrier(CLK_LOCAL_MEM_FENCE);
   reduce(local_tot_u, partial_tot_u); 
-  reduce(local_tot_cells, partial_tot_cells); 
+  reduce2(local_tot_cells, partial_tot_cells); 
   
 }
