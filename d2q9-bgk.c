@@ -626,7 +626,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
                                   sizeof(size_t), &ocl->work_group_size, NULL);
   checkError(err, "Getting kernel work group info", __LINE__);
 
-  size_t maxSize = ocl->work_group_size;
+  size_t maxSize = 64;ocl->work_group_size;
   
   if (maxSize >= params->nx){
     ocl->local[0] = params->nx;
