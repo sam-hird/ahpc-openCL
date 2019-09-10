@@ -1,0 +1,46 @@
+Running on host: node46-001
+Time is: Wed Aug 21 16:32:24 BST 2019
+Directory is: /newhome/sh15793/ahpc-opencl
+PBS job ID is: 8644339.master.cm.cluster
+This jobs runs on the following machines: node46-001
+GPU selected: 0
+
+
+Available OpenCL devices:
+ 0: Tesla K20m
+ 1: Tesla K20m
+
+Selected OpenCL device:
+-> Tesla K20m (index=0)
+
+==done==
+Reynolds number:		9.780880928040E+00
+Elapsed time:			3.112410 (s)
+Elapsed user CPU time:		3.821419 (s)
+Elapsed system CPU time:	0.521920 (s)
+
+Available OpenCL devices:
+ 0: Tesla K20m
+ 1: Tesla K20m
+
+Selected OpenCL device:
+-> Tesla K20m (index=0)
+
+==done==
+Reynolds number:		1.005407333374E+01
+Elapsed time:			10.286586 (s)
+Elapsed user CPU time:		9.562546 (s)
+Elapsed system CPU time:	1.943704 (s)
+
+Available OpenCL devices:
+ 0: Tesla K20m
+ 1: Tesla K20m
+
+Selected OpenCL device:
+-> Tesla K20m (index=0)
+
+==done==
+Reynolds number:		3.400305509567E+00
+Elapsed time:			23.351541 (s)
+Elapsed user CPU time:		19.516033 (s)
+Elapsed system CPU time:	5.077228 (s)

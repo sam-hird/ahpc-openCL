@@ -626,7 +626,7 @@ int initialise(const char* paramfile, const char* obstaclefile,
   err = clGetKernelWorkGroupInfo (ocl->av_velocity, ocl->device, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, 
                                   sizeof(size_t), &ocl->work_group_size, NULL);
   checkError(err, "Getting kernel work group info", __LINE__);
-  //ocl->work_group_size = params->nx/4;
+  ocl->work_group_size = 64;// params->nx/4;
   size_t maxSize = ocl->work_group_size;
   
   if (maxSize >= params->nx){
